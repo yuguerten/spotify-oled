@@ -8,9 +8,10 @@ pushes them over USB serial to the ESP32 sketch in this folder
 
 Protocol (115200 baud, one command per line):
   M|<dance_style>|<Playing|Paused>   track state (style = hash(title+artist) % 4)
-  T|<hex>                            title bitmap, 88x14 px, Adafruit packing
-  A|<hex>                            artist bitmap, 88x11 px, Adafruit packing
-  P|<pos_sec>|<len_sec>              progress clock for the bar + header time
+  T|<hex>                            title bitmap, 54x14 px, Adafruit packing
+  A|<hex>                            artist bitmap, 54x11 px, Adafruit packing
+  C|<hex>                            cover art, 32x32 px dithered (Spotify/iTunes)
+  P|<pos_sec>|<len_sec>              progress clock for the bar + times
 
 Requirements: playerctl, python3-pyserial, python3-pil (with raqm),
 Noto Naskh Arabic + DejaVu Sans fonts, Spotify desktop app playing.
@@ -23,10 +24,11 @@ from PIL import Image, ImageDraw, ImageFont
 
 AR_FONT = '/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf'
 LT_FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
-TW, TH, T_SIZE = 88, 14, 12
-AW, AH, A_SIZE = 88, 11, 9
-WIN = 88
+TW, TH, T_SIZE = 54, 14, 12
+AW, AH, A_SIZE = 54, 11, 9
+WIN = 54
 GAP = 12
+CW, CH = 32, 32
 
 FONTS = {}
 
@@ -133,7 +135,8 @@ def snapshot():
     try:
         return subprocess.check_output(
             ['playerctl', '-p', 'spotify', 'metadata',
-             '--format', '{{title}}|{{artist}}|{{status}}|{{mpris:length}}'],
+             '--format',
+             '{{title}}|{{artist}}|{{status}}|{{mpris:length}}|{{mpris:artUrl}}'],
             text=True, timeout=5).strip()
     except Exception:
         return ''
@@ -153,6 +156,56 @@ def pick_dance(s):
     for c in s:
         h = ((h << 5) + h + ord(c)) & 0xFFFFFFFF
     return h % 4
+
+
+ART_CACHE = {}
+
+
+def download_img(url):
+    import urllib.request
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'spotify-oled/1.0'})
+        return Image.open(urllib.request.urlopen(req, timeout=8)).convert('L')
+    except Exception:
+        return None
+
+
+def itunes_art(title, artist):
+    import json
+    import urllib.parse
+    import urllib.request
+    try:
+        q = urllib.parse.quote(f'{artist} {title}')
+        with urllib.request.urlopen(
+                f'https://itunes.apple.com/search?term={q}&media=music&limit=1',
+                timeout=8) as r:
+            d = json.load(r)
+        if d.get('resultCount'):
+            u = d['results'][0]['artworkUrl100'].replace('100x100bb', '600x600bb')
+            return download_img(u)
+    except Exception:
+        pass
+    return None
+
+
+def cover_hex(title, artist, art_url):
+    """32x32 dithered cover packed for drawBitmap, cached per track."""
+    from PIL import ImageOps
+    key = (title, artist)
+    if key not in ART_CACHE:
+        img = download_img(art_url) if art_url else None
+        if img is None:
+            img = itunes_art(title, artist)
+        ART_CACHE[key] = img
+        # keep the cache small
+        while len(ART_CACHE) > 20:
+            ART_CACHE.pop(next(iter(ART_CACHE)))
+    img = ART_CACHE[key]
+    if img is None:
+        return None
+    img = ImageOps.autocontrast(img, cutoff=2).resize((CW, CH), Image.LANCZOS)
+    bw = img.convert('1', dither=Image.FLOYDSTEINBERG)
+    return pack_row_major(bw).hex()
 
 
 s = serial.Serial('/dev/ttyUSB0', 115200, timeout=1)
@@ -175,6 +228,7 @@ def send(line):
 
 last = ''
 fullT = fullA = None
+cover_now = None
 offT = offA = 0
 last_push = 0
 track_len = 0
@@ -215,22 +269,30 @@ while True:
                     track_len = int(int(parts[3]) // 1000000)
                 except ValueError:
                     pass
+            art_url = parts[4].strip() if len(parts) > 4 else ''
             if msg != last:
                 last = msg
                 style = pick_dance(title + artist)
                 fullT = render_line(title, T_SIZE, TH, bold=True)
                 fullA = render_line(artist, A_SIZE, AH)
+                cover_now = cover_hex(title, artist, art_url)
                 offT = offA = 0
                 send(f'M|{style}|{status}')
                 time.sleep(0.05)
                 push_windows()
+                if cover_now:
+                    time.sleep(0.05)
+                    send('C|' + cover_now)
+                    print(f'cover: {len(cover_now) // 2} bytes', flush=True)
                 last_push = time.time()
                 print(f'sent: {title}|{artist}|{status} style={style}', flush=True)
-    # re-push windows regularly: scrolls long lines, retries static ones
+    # re-push windows regularly: scrolls long lines, retries static ones + cover
     if fullT is not None and time.time() - last_push > 0.4:
         scrolling = (fullT.width > WIN) or (fullA is not None and fullA.width > WIN)
         if scrolling or time.time() - last_push > 2.0:
             push_windows()
+            if cover_now and time.time() - last_push > 2.0:
+                send('C|' + cover_now)
             last_push = time.time()
     # progress clock (~0.5s, sent only when the second changes)
     if fullT is not None and time.time() - last_pos_q > 0.5:

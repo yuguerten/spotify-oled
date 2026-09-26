@@ -7,19 +7,25 @@
 #define OLED_RESET -1
 
 // Text bitmap zones (rendered on PC with full Arabic shaping, pushed over serial)
-#define TW 88
+#define TW 54
 #define TH 14
-#define AW 88
+#define AW 54
 #define AH 11
-#define TBYTES (TW * TH / 8)   // 154
-#define ABYTES (AW * AH / 8)   // 121 (row-major, MSB first per Adafruit)
+#define TBYTES (((TW + 7) / 8) * TH)   // 98
+#define ABYTES (((AW + 7) / 8) * AH)   // 77
+// Album art thumbnail (PC downloads + dithers the cover)
+#define CW 32
+#define CH 32
+#define CBYTES (((CW + 7) / 8) * CH)   // 128
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 uint8_t titleBmp[TBYTES];
 uint8_t artistBmp[ABYTES];
+uint8_t coverBmp[CBYTES];
 bool hasT = false;
 bool hasA = false;
+bool hasC = false;
 bool isPaused = false;
 int danceStyle = 0; // 0 disco, 1 shuffle, 2 robot, 3 bounce
 long trackPos = 0;  // seconds elapsed (from PC)
@@ -311,27 +317,38 @@ void drawSpotify() {
     display.drawLine(0, 52, 128, 52, SSD1306_WHITE);
     for (int x = 0; x < 126; x += 6) display.fillRect(x, 61, 3, 2, SSD1306_WHITE);
   } else {
-    // PLAYING: classic now-playing — bold title, artist, times, round bar
+    // PLAYING: classic now-playing — art frame, bold title, artist, times, round bar
     // Pause icon in header (music is playing)
     display.fillRect(104, 3, 3, 6, SSD1306_BLACK);
     display.fillRect(109, 3, 3, 6, SSD1306_BLACK);
-    if (hasT) display.drawBitmap(0, 15, titleBmp, TW, TH, SSD1306_WHITE);
-    if (hasA) display.drawBitmap(0, 31, artistBmp, AW, AH, SSD1306_WHITE);
+    // Album art thumbnail (left), note placeholder until the cover arrives
+    display.drawRect(0, 13, 34, 34, SSD1306_WHITE);
+    if (hasC) {
+      display.drawBitmap(1, 14, coverBmp, CW, CH, SSD1306_WHITE);
+    } else {
+      display.fillCircle(12, 33, 2, SSD1306_WHITE);
+      display.fillCircle(22, 33, 2, SSD1306_WHITE);
+      display.drawLine(14, 33, 14, 25, SSD1306_WHITE);
+      display.drawLine(24, 33, 24, 25, SSD1306_WHITE);
+      display.drawLine(14, 25, 24, 25, SSD1306_WHITE);
+    }
+    if (hasT) display.drawBitmap(36, 14, titleBmp, TW, TH, SSD1306_WHITE);
+    if (hasA) display.drawBitmap(36, 29, artistBmp, AW, AH, SSD1306_WHITE);
     // Times row (micro digits): elapsed left, remaining right
     char t1[8], t2[8];
     fmtTime(t1, trackPos);
     fmtTime(t2, trackLen > trackPos ? trackLen - trackPos : 0);
-    drawMicroText(0, 43, t1, SSD1306_WHITE);
+    drawMicroText(36, 42, t1, SSD1306_WHITE);
     char rem[10];
     rem[0] = '-';
     strcpy(rem + 1, t2);
-    drawMicroText(88 - microWidth(rem), 43, rem, SSD1306_WHITE);
+    drawMicroText(90 - microWidth(rem), 42, rem, SSD1306_WHITE);
     // Rounded progress bar
-    display.drawRoundRect(0, 49, 88, 4, 2, SSD1306_WHITE);
+    display.drawRoundRect(0, 47, 90, 4, 2, SSD1306_WHITE);
     if (trackLen > 0) {
-      int fw = (int)((trackPos * 84L) / trackLen);
-      if (fw > 84) fw = 84;
-      if (fw > 0) display.fillRect(2, 50, fw, 2, SSD1306_WHITE);
+      int fw = (int)((trackPos * 86L) / trackLen);
+      if (fw > 86) fw = 86;
+      if (fw > 0) display.fillRect(2, 48, fw, 2, SSD1306_WHITE);
     }
     // Club room + full-body dancer freestanding on the right
     drawPartyBg(millis() / 250);
@@ -350,7 +367,7 @@ void setup() {
     for (;;);
   }
   drawSpotify();
-  Serial.println("ready: send M|style|status, T|hex, A|hex over serial");
+  Serial.println("ready: send M|.. T|hex A|hex C|hex P|.. over serial");
 }
 
 void loop() {
@@ -374,6 +391,8 @@ void loop() {
         if (parseHex(payload, titleBmp, TBYTES)) { hasT = true; drawSpotify(); }
       } else if (kind == 'A') {
         if (parseHex(payload, artistBmp, ABYTES)) { hasA = true; drawSpotify(); }
+      } else if (kind == 'C') {
+        if (parseHex(payload, coverBmp, CBYTES)) { hasC = true; drawSpotify(); }
       } else if (kind == 'P') {
         // P|posSec|lenSec — progress clock, no redraw reset
         int sep = payload.indexOf('|');
