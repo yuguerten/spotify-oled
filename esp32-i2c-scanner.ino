@@ -46,14 +46,18 @@ void drawPartyBg(int step) {
   display.drawRect(90, 42, 8, 8, SSD1306_WHITE);
   display.drawCircle(94, 44, 2, SSD1306_WHITE);
   display.drawCircle(94, 48, 1, SSD1306_WHITE);
-  // Dance-floor strip along the bottom (checker blinks)
+  // Beat equalizer along the bottom: bars bounce with the groove
+  // (decorative — no audio line wired — kicked by the dance frames)
   display.drawLine(0, 52, 128, 52, SSD1306_WHITE);
-  for (int x = 0; x < 128; x += 5) {
-    if (((x / 5) + f) % 2 == 0) {
-      display.fillRect(x, 53, 4, 3, SSD1306_WHITE);
-    } else {
-      display.drawRect(x, 53, 4, 3, SSD1306_WHITE);
-    }
+  int beat = (step % 4 == 1) ? 3 : 0; // kick drum on the bounce frame
+  for (int x = 0, i = 0; x < 126; x += 6, i++) {
+    float h = 2.0
+      + 3.5 * (0.5 + 0.5 * sin(step * 0.9 + i * 1.1))
+      + 2.5 * (0.5 + 0.5 * sin(step * 2.1 + i * 2.7));
+    int bh = (int)(h + 0.5) + (i % 3 == 0 ? beat : 0);
+    if (bh < 1) bh = 1;
+    if (bh > 10) bh = 10;
+    display.fillRect(x, 63 - bh, 3, bh, SSD1306_WHITE);
   }
   // Floating notes bob smoothly (no popping)
   int ph1 = (step * 2) % 32;
