@@ -330,6 +330,9 @@ void drawSpotify() {
     display.setCursor(4, 38);
     display.println("lahi7fdak");
     drawSadFace(106, 35, millis() / 500);
+    // EQ flatlines while paused — no bounce without music
+    display.drawLine(0, 52, 128, 52, SSD1306_WHITE);
+    for (int x = 0; x < 126; x += 6) display.fillRect(x, 61, 3, 2, SSD1306_WHITE);
   } else {
     // PLAYING: classic now-playing — bold title, artist, times, round bar
     // Pause icon in header (music is playing)
