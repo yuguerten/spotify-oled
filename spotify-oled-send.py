@@ -138,7 +138,8 @@ def snapshot():
             ['playerctl', '-p', 'spotify', 'metadata',
              '--format',
              '{{title}}|{{artist}}|{{status}}|{{mpris:length}}|{{mpris:artUrl}}'],
-            text=True, timeout=5).strip()
+            text=True, timeout=5,
+             stderr=subprocess.DEVNULL).strip()
     except Exception:
         return ''
 
@@ -147,7 +148,8 @@ def position():
     try:
         return int(float(subprocess.check_output(
             ['playerctl', '-p', 'spotify', 'position'],
-            text=True, timeout=5).strip()))
+            text=True, timeout=5,
+             stderr=subprocess.DEVNULL).strip()))
     except Exception:
         return None
 
