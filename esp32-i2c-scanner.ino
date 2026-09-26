@@ -213,24 +213,54 @@ void drawDancer(int cx, int cy, int step) {
   }
 }
 
-// Polite-cat PLEASE meme for the PAUSED screen (40x36 mono, left side)
-static const uint8_t PAUSED_IMG[] = {
-  0x00, 0x20, 0x00, 0x00, 0x01, 0x00, 0x58, 0x00, 0x04, 0x55, 0x00, 0x48,
-  0x92, 0x41, 0x0A, 0x01, 0x36, 0x00, 0x10, 0x2A, 0x04, 0x54, 0x21, 0x04,
-  0x55, 0x00, 0xAA, 0x84, 0x41, 0x2A, 0x00, 0x2D, 0x50, 0x14, 0x5A, 0x00,
-  0xB7, 0xFF, 0xC0, 0x55, 0x08, 0x9A, 0xBF, 0x80, 0xAB, 0x00, 0x6D, 0xFF,
-  0xE0, 0x55, 0x00, 0xB5, 0xBF, 0xF4, 0x2E, 0x00, 0xAB, 0xFF, 0xF8, 0xAA,
-  0x08, 0xB5, 0x7F, 0xDA, 0x14, 0x00, 0xE8, 0x7F, 0xFC, 0x16, 0x01, 0xD0,
-  0x37, 0x60, 0x2A, 0x03, 0x70, 0x7F, 0xC0, 0x8C, 0x13, 0xF8, 0x3E, 0xC0,
-  0x09, 0x03, 0x7A, 0xB7, 0x81, 0x05, 0x05, 0xBF, 0xFA, 0xD0, 0x82, 0x03,
-  0x6F, 0xAF, 0xFF, 0x43, 0x05, 0xBA, 0xD5, 0x5F, 0xA1, 0x12, 0xDF, 0xAC,
-  0xF7, 0xD1, 0x03, 0x6A, 0xD4, 0xBD, 0x73, 0x02, 0xAB, 0x65, 0xEF, 0x79,
-  0x23, 0x55, 0x56, 0xB5, 0xAF, 0x05, 0x50, 0x91, 0x55, 0x7B, 0x02, 0xAA,
-  0x45, 0x4A, 0xAF, 0x02, 0xA5, 0x28, 0x25, 0x7F, 0x02, 0xB5, 0x55, 0x92,
-  0xB7, 0x12, 0xAA, 0xAA, 0x4A, 0xDF, 0x02, 0xAA, 0xAA, 0xAA, 0xBF, 0x03,
-  0x55, 0x49, 0x25, 0x6F, 0x05, 0x5A, 0xA4, 0x95, 0xBF, 0x02, 0xA5, 0x2A,
-  0x56, 0xEF, 0x05, 0xAE, 0xD6, 0xB5, 0xBF, 0x02, 0xAF, 0x5E, 0x9B, 0xFF,
+// Rotating protest signs for the paused striker (ASCII only, max 9 chars/line)
+static const char *SIGNS[][2] = {
+  {"NO MUSIC", "NO DANCE"},
+  {"cmon bud", "PLAY IT"},
+  {"SO QUIET", "IT HURTS"},
+  {"lahi7fdak", "PLAY IT!"},
+  {"I WORK FOR", "BEATS"},
+  {"TURN IT", "BACK ON"},
 };
+#define NSIGNS 6
+
+// Striker: frozen dancer holding a protest sign, tapping foot, fuming
+void drawStriker(int cx, int feetY, int step) {
+  int tap = (step % 2 == 0) ? 0 : 1;
+  int hipy = feetY - 4;
+  int shy = feetY - 10;
+  // Head with angry brows + frown
+  display.drawCircle(cx, feetY - 13, 3, SSD1306_WHITE);
+  display.drawLine(cx - 3, feetY - 16, cx - 1, feetY - 14, SSD1306_WHITE);
+  display.drawLine(cx + 3, feetY - 16, cx + 1, feetY - 14, SSD1306_WHITE);
+  display.drawPixel(cx - 1, feetY - 13, SSD1306_WHITE);
+  display.drawPixel(cx + 1, feetY - 13, SSD1306_WHITE);
+  display.drawLine(cx - 2, feetY - 11, cx + 2, feetY - 11, SSD1306_WHITE);
+  display.drawLine(cx - 2, feetY - 11, cx - 3, feetY - 13, SSD1306_WHITE);
+  display.drawLine(cx + 2, feetY - 11, cx + 3, feetY - 13, SSD1306_WHITE);
+  // Body
+  display.drawLine(cx, shy, cx, hipy, SSD1306_WHITE);
+  // Left arm crossed over chest
+  display.drawLine(cx, shy, cx - 6, shy + 3, SSD1306_WHITE);
+  display.drawLine(cx - 6, shy + 3, cx - 2, shy + 6, SSD1306_WHITE);
+  // Right arm up holding the stick, stick meets the sign's bottom edge
+  display.drawLine(cx, shy, cx + 8, shy - 6, SSD1306_WHITE);
+  display.drawLine(cx + 8, shy - 6, 78, 32, SSD1306_WHITE);
+  // Legs, one foot tapping
+  display.drawLine(cx, hipy, cx - 4, feetY, SSD1306_WHITE);
+  display.drawLine(cx, hipy, cx + 4, feetY + tap, SSD1306_WHITE);
+}
+
+// Protest sign: white board, two centered black lines
+void drawSign(const char *l1, const char *l2) {
+  display.fillRect(64, 14, 56, 18, SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_BLACK);
+  display.setCursor(64 + (56 - strlen(l1) * 6) / 2, 15);
+  display.print(l1);
+  display.setCursor(64 + (56 - strlen(l2) * 6) / 2, 23);
+  display.print(l2);
+}
 
 // Parse "M|style|status", "T|hex", "A|hex" lines from the PC sender
 bool parseHex(const String &hex, uint8_t *buf, int n) {
@@ -361,21 +391,12 @@ void drawSpotify() {
     drawPartyBg(millis() / 400);
     drawDancer(110, 38, millis() / 400);
   } else if (isPaused) {
-    // PAUSED: 3afak kid + begging text (drawn emoji retired)
-    // Play triangle in header (hit play!)
+    // PAUSED: dancer on strike — protest sign rotates guilt trips, foot taps
+    // Play triangle in header (hit play = end the strike!)
     display.fillTriangle(104, 2, 104, 9, 111, 5, SSD1306_BLACK);
-    display.drawBitmap(0, 14, PAUSED_IMG, 40, 36, SSD1306_WHITE);
-    display.setTextSize(2);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(42, 14);
-    display.println("PLEASE?");
-    display.setTextSize(1);
-    display.setCursor(44, 29);
-    display.println("cmon bud");
-    display.setCursor(44, 36);
-    display.println("play music");
-    display.setCursor(44, 43);
-    display.println("lahi7fdak");
+    int sign = (millis() / 3000) % NSIGNS;
+    drawSign(SIGNS[sign][0], SIGNS[sign][1]);
+    drawStriker(48, 50, millis() / 400);
     // EQ flatlines while paused — no bounce without music
     display.drawLine(0, 52, 128, 52, SSD1306_WHITE);
     for (int x = 0; x < 126; x += 6) display.fillRect(x, 61, 3, 2, SSD1306_WHITE);
