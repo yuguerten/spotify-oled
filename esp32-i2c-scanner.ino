@@ -22,6 +22,8 @@ bool hasT = false;
 bool hasA = false;
 bool isPaused = false;
 int danceStyle = 0; // 0 disco, 1 shuffle, 2 robot, 3 bounce
+long trackPos = 0;  // seconds elapsed (from PC)
+long trackLen = 0;  // seconds total (from PC)
 unsigned long lastMsg = 0;
 unsigned long danceT = 0;
 
@@ -254,6 +256,12 @@ bool parseHex(const String &hex, uint8_t *buf, int n) {
   return true;
 }
 
+// m:ss formatter for the header clock
+void fmtTime(char *buf, long s) {
+  if (s < 0) s = 0;
+  sprintf(buf, "%ld:%02ld", s / 60, s % 60);
+}
+
 void drawSpotify() {
   display.clearDisplay();
   // Header
@@ -291,13 +299,27 @@ void drawSpotify() {
     display.println("lahi7fdak");
     drawSadFace(106, 35, millis() / 500);
   } else {
-    // PLAYING: PC-rendered title/artist bitmaps + full-body dancer
-    display.setTextColor(SSD1306_WHITE);
+    // PLAYING: player interface — inverted title card + artist + progress
+    display.fillRoundRect(0, 14, 90, 17, 2, SSD1306_WHITE);
+    if (hasT) display.drawBitmap(1, 15, titleBmp, TW, TH, SSD1306_BLACK);
+    if (hasA) display.drawBitmap(0, 33, artistBmp, AW, AH, SSD1306_WHITE);
+    // Progress bar
+    display.drawRect(0, 46, 88, 4, SSD1306_WHITE);
+    if (trackLen > 0) {
+      int fw = (int)((trackPos * 84L) / trackLen);
+      if (fw > 84) fw = 84;
+      if (fw > 0) display.fillRect(2, 47, fw, 2, SSD1306_WHITE);
+    }
+    // Header clock: elapsed/total
+    char t1[8], t2[8];
+    fmtTime(t1, trackPos);
+    fmtTime(t2, trackLen);
     display.setTextSize(1);
-    display.setCursor(0, 16);
-    display.println("Title:");
-    if (hasT) display.drawBitmap(0, 24, titleBmp, TW, TH, SSD1306_WHITE);
-    if (hasA) display.drawBitmap(0, 39, artistBmp, AW, AH, SSD1306_WHITE);
+    display.setTextColor(SSD1306_BLACK);
+    display.setCursor(52, 2);
+    display.print(t1);
+    display.print("/");
+    display.print(t2);
     // Club room + full-body dancer freestanding on the right
     drawPartyBg(millis() / 250);
     drawDancer(110, 38, millis() / 250);
@@ -339,6 +361,11 @@ void loop() {
         if (parseHex(payload, titleBmp, TBYTES)) { hasT = true; drawSpotify(); }
       } else if (kind == 'A') {
         if (parseHex(payload, artistBmp, ABYTES)) { hasA = true; drawSpotify(); }
+      } else if (kind == 'P') {
+        // P|posSec|lenSec — progress clock, no redraw reset
+        int sep = payload.indexOf('|');
+        trackPos = payload.substring(0, sep > 0 ? sep : payload.length()).toInt();
+        if (sep > 0) trackLen = payload.substring(sep + 1).toInt();
       }
     }
     lastMsg = millis();

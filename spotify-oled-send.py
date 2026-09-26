@@ -10,6 +10,7 @@ Protocol (115200 baud, one command per line):
   M|<dance_style>|<Playing|Paused>   track state (style = hash(title+artist) % 4)
   T|<hex>                            title bitmap, 88x14 px, Adafruit packing
   A|<hex>                            artist bitmap, 88x11 px, Adafruit packing
+  P|<pos_sec>|<len_sec>              progress clock for the bar + header time
 
 Requirements: playerctl, python3-pyserial, python3-pil (with raqm),
 Noto Naskh Arabic + DejaVu Sans fonts, Spotify desktop app playing.
@@ -123,10 +124,19 @@ def snapshot():
     try:
         return subprocess.check_output(
             ['playerctl', '-p', 'spotify', 'metadata',
-             '--format', '{{title}}|{{artist}}|{{status}}'],
+             '--format', '{{title}}|{{artist}}|{{status}}|{{mpris:length}}'],
             text=True, timeout=5).strip()
     except Exception:
         return ''
+
+
+def position():
+    try:
+        return int(float(subprocess.check_output(
+            ['playerctl', '-p', 'spotify', 'position'],
+            text=True, timeout=5).strip()))
+    except Exception:
+        return None
 
 
 def pick_dance(s):
@@ -158,6 +168,9 @@ last = ''
 fullT = fullA = None
 offT = offA = 0
 last_push = 0
+track_len = 0
+lastP = (-1, -1)
+last_pos_q = 0
 
 
 def push_windows():
@@ -188,6 +201,11 @@ while True:
             title = parts[0].replace('|', ' ').strip()
             artist = parts[1].replace('|', ' ').strip() if len(parts) > 1 else ''
             status = parts[2].strip() if len(parts) > 2 and parts[2].strip() else 'Playing'
+            if len(parts) > 3:
+                try:
+                    track_len = int(int(parts[3]) // 1000000)
+                except ValueError:
+                    pass
             if msg != last:
                 last = msg
                 style = pick_dance(title + artist)
@@ -205,4 +223,11 @@ while True:
         if scrolling or time.time() - last_push > 2.0:
             push_windows()
             last_push = time.time()
+    # progress clock (~0.5s, sent only when the second changes)
+    if fullT is not None and time.time() - last_pos_q > 0.5:
+        last_pos_q = time.time()
+        pos = position()
+        if pos is not None and (pos, track_len) != lastP:
+            lastP = (pos, track_len)
+            send(f'P|{pos}|{track_len}')
     time.sleep(0.1)
