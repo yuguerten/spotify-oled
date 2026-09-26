@@ -256,11 +256,41 @@ bool parseHex(const String &hex, uint8_t *buf, int n) {
   return true;
 }
 
-// m:ss formatter for the header clock
+// m:ss formatter for the time readout
 void fmtTime(char *buf, long s) {
   if (s < 0) s = 0;
   sprintf(buf, "%ld:%02ld", s / 60, s % 60);
 }
+
+// 3x5 micro digits for the elapsed/remaining readout
+static const uint8_t MICRO[12][5] = {
+  {0x7,0x5,0x5,0x5,0x7}, // 0
+  {0x2,0x6,0x2,0x2,0x7}, // 1
+  {0x7,0x1,0x7,0x4,0x7}, // 2
+  {0x7,0x1,0x7,0x1,0x7}, // 3
+  {0x5,0x5,0x7,0x1,0x1}, // 4
+  {0x7,0x4,0x7,0x1,0x7}, // 5
+  {0x7,0x4,0x7,0x5,0x7}, // 6
+  {0x7,0x1,0x1,0x2,0x2}, // 7
+  {0x7,0x5,0x7,0x5,0x7}, // 8
+  {0x7,0x5,0x7,0x1,0x7}, // 9
+  {0x0,0x2,0x0,0x2,0x0}, // :
+  {0x0,0x0,0x7,0x0,0x0}, // -
+};
+void drawMicroChar(int x, int y, char c, uint16_t color) {
+  int idx = -1;
+  if (c >= '0' && c <= '9') idx = c - '0';
+  else if (c == ':') idx = 10;
+  else if (c == '-') idx = 11;
+  if (idx < 0) return;
+  for (int r = 0; r < 5; r++)
+    for (int col = 0; col < 3; col++)
+      if (MICRO[idx][r] & (0x4 >> col)) display.drawPixel(x + col, y + r, color);
+}
+void drawMicroText(int x, int y, const char *s, uint16_t color) {
+  while (*s) { drawMicroChar(x, y, *s, color); x += 4; s++; }
+}
+int microWidth(const char *s) { return strlen(s) * 4 - 1; }
 
 void drawSpotify() {
   display.clearDisplay();
@@ -269,14 +299,8 @@ void drawSpotify() {
   display.setTextSize(1);
   display.setTextColor(SSD1306_BLACK);
   display.setCursor(4, 2);
-  display.println("SPOTIFY");
-  // Note icon: beamed pair of eighth notes
-  display.fillCircle(110, 9, 2, SSD1306_BLACK);
-  display.fillCircle(119, 9, 2, SSD1306_BLACK);
-  display.drawLine(112, 9, 112, 2, SSD1306_BLACK);
-  display.drawLine(121, 9, 121, 2, SSD1306_BLACK);
-  display.drawLine(112, 2, 121, 2, SSD1306_BLACK);
-  display.drawLine(112, 3, 121, 3, SSD1306_BLACK);
+  display.println("Spotify");
+  display.drawLine(0, 12, 127, 12, SSD1306_WHITE);
 
   if (!hasT && !hasA && !isPaused) {
     display.setTextColor(SSD1306_WHITE);
@@ -284,11 +308,15 @@ void drawSpotify() {
     display.println("Waiting...");
     display.setCursor(10, 38);
     display.println("Play on Spotify");
+    // Play triangle in header (idle — press play)
+    display.fillTriangle(104, 2, 104, 9, 111, 5, SSD1306_BLACK);
     // Club room + full-body dancer idling while waiting
     drawPartyBg(millis() / 400);
     drawDancer(110, 38, millis() / 400);
   } else if (isPaused) {
     // PAUSED: no body — just the big upset face begging for music
+    // Play triangle in header (hit play!)
+    display.fillTriangle(104, 2, 104, 9, 111, 5, SSD1306_BLACK);
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(4, 18);
@@ -299,27 +327,28 @@ void drawSpotify() {
     display.println("lahi7fdak");
     drawSadFace(106, 35, millis() / 500);
   } else {
-    // PLAYING: player interface — inverted title card + artist + progress
-    display.fillRoundRect(0, 14, 90, 17, 2, SSD1306_WHITE);
-    if (hasT) display.drawBitmap(1, 15, titleBmp, TW, TH, SSD1306_BLACK);
-    if (hasA) display.drawBitmap(0, 33, artistBmp, AW, AH, SSD1306_WHITE);
-    // Progress bar
-    display.drawRect(0, 46, 88, 4, SSD1306_WHITE);
+    // PLAYING: classic now-playing — bold title, artist, times, round bar
+    // Pause icon in header (music is playing)
+    display.fillRect(104, 3, 3, 6, SSD1306_BLACK);
+    display.fillRect(109, 3, 3, 6, SSD1306_BLACK);
+    if (hasT) display.drawBitmap(0, 15, titleBmp, TW, TH, SSD1306_WHITE);
+    if (hasA) display.drawBitmap(0, 31, artistBmp, AW, AH, SSD1306_WHITE);
+    // Times row (micro digits): elapsed left, remaining right
+    char t1[8], t2[8];
+    fmtTime(t1, trackPos);
+    fmtTime(t2, trackLen > trackPos ? trackLen - trackPos : 0);
+    drawMicroText(0, 43, t1, SSD1306_WHITE);
+    char rem[10];
+    rem[0] = '-';
+    strcpy(rem + 1, t2);
+    drawMicroText(88 - microWidth(rem), 43, rem, SSD1306_WHITE);
+    // Rounded progress bar
+    display.drawRoundRect(0, 49, 88, 4, 2, SSD1306_WHITE);
     if (trackLen > 0) {
       int fw = (int)((trackPos * 84L) / trackLen);
       if (fw > 84) fw = 84;
-      if (fw > 0) display.fillRect(2, 47, fw, 2, SSD1306_WHITE);
+      if (fw > 0) display.fillRect(2, 50, fw, 2, SSD1306_WHITE);
     }
-    // Header clock: elapsed/total
-    char t1[8], t2[8];
-    fmtTime(t1, trackPos);
-    fmtTime(t2, trackLen);
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_BLACK);
-    display.setCursor(52, 2);
-    display.print(t1);
-    display.print("/");
-    display.print(t2);
     // Club room + full-body dancer freestanding on the right
     drawPartyBg(millis() / 250);
     drawDancer(110, 38, millis() / 250);

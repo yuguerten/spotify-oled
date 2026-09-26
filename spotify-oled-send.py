@@ -73,8 +73,11 @@ def first_strong(text):
     return 'lt'
 
 
-def render_line(text, size, h):
-    """Full-width 1-bit image of the shaped line (visual order)."""
+def render_line(text, size, h, bold=False):
+    """Full-width 1-bit image of the shaped line (visual order).
+
+    bold=True double-strikes each run for a heavier title weight.
+    """
     rs = split_runs(text)
     rtl = first_strong(text) == 'ar'
     fonts = {'ar': font(AR_FONT, size), 'lt': font(LT_FONT, size)}
@@ -82,19 +85,25 @@ def render_line(text, size, h):
     widths = [int(meas.textlength(s, font=fonts[k],
                                   direction='rtl' if k == 'ar' else 'ltr'))
               for k, s in rs]
-    img = Image.new('1', (sum(widths) + 4, h), 0)
+    img = Image.new('1', (sum(widths) + 4 + (1 if bold else 0), h), 0)
     d = ImageDraw.Draw(img)
+
+    def strike(xe, k, s):
+        d.text((xe, 1), s, font=fonts[k], fill=1,
+               direction='rtl' if k == 'ar' else 'ltr')
+        if bold:
+            d.text((xe + 1, 1), s, font=fonts[k], fill=1,
+                   direction='rtl' if k == 'ar' else 'ltr')
+
     if not rtl:
         x = 2
         for (k, s), w in zip(rs, widths):
-            d.text((x, 1), s, font=fonts[k], fill=1,
-                   direction='rtl' if k == 'ar' else 'ltr')
+            strike(x, k, s)
             x += w
     else:
         x = img.width - 2
         for (k, s), w in zip(rs, widths):
-            d.text((x - w, 1), s, font=fonts[k], fill=1,
-                   direction='rtl' if k == 'ar' else 'ltr')
+            strike(x - w, k, s)
             x -= w
     return img
 
@@ -209,7 +218,7 @@ while True:
             if msg != last:
                 last = msg
                 style = pick_dance(title + artist)
-                fullT = render_line(title, T_SIZE, TH)
+                fullT = render_line(title, T_SIZE, TH, bold=True)
                 fullA = render_line(artist, A_SIZE, AH)
                 offT = offA = 0
                 send(f'M|{style}|{status}')
