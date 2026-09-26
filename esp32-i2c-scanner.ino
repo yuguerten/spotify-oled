@@ -203,50 +203,24 @@ void drawDancer(int cx, int cy, int step) {
   }
 }
 
-// BIG sad face close-up for PAUSED — no body, all expression
-void drawSadFace(int cx, int cy, int step) {
-  int f = step % 4;
-  int shake = (f % 2 == 0) ? 1 : -1; // trembling with upset
-  int bx = cx + shake;
-  // Headphone band over the top
-  for (int a = 200; a <= 340; a += 6) {
-    float rad = a * PI / 180.0;
-    display.drawPixel(bx + 13 * cos(rad), cy - 1 + 13 * sin(rad), SSD1306_WHITE);
-  }
-  // Ear cups
-  display.fillRect(bx - 15, cy - 4, 4, 8, SSD1306_WHITE);
-  display.fillRect(bx + 11, cy - 4, 4, 8, SSD1306_WHITE);
-  // Head (big, fully visible — nothing hanging over it)
-  display.drawCircle(bx, cy, 11, SSD1306_WHITE);
-  // Angry brows slanting hard down toward center
-  display.drawLine(bx - 7, cy - 8, bx - 2, cy - 5, SSD1306_WHITE);
-  display.drawLine(bx - 7, cy - 7, bx - 2, cy - 4, SSD1306_WHITE);
-  display.drawLine(bx + 7, cy - 8, bx + 2, cy - 5, SSD1306_WHITE);
-  display.drawLine(bx + 7, cy - 7, bx + 2, cy - 4, SSD1306_WHITE);
-  // Droopy sad eyes looking down
-  display.fillCircle(bx - 4, cy - 1, 2, SSD1306_WHITE);
-  display.fillCircle(bx + 4, cy - 1, 2, SSD1306_WHITE);
-  display.fillCircle(bx - 4, cy - 1, 1, SSD1306_BLACK);
-  display.fillCircle(bx + 4, cy - 1, 1, SSD1306_BLACK);
-  // Tear stream blinking under right eye
-  if (f < 2) {
-    display.drawLine(bx + 5, cy + 1, bx + 5, cy + 5, SSD1306_WHITE);
-    display.drawPixel(bx + 5, cy + 6, SSD1306_WHITE);
-  }
-  // Anger veins popping on both temples
-  display.drawLine(bx - 13, cy - 8, bx - 11, cy - 6, SSD1306_WHITE);
-  display.drawLine(bx - 11, cy - 8, bx - 13, cy - 6, SSD1306_WHITE);
-  display.drawLine(bx + 11, cy - 8, bx + 13, cy - 6, SSD1306_WHITE);
-  display.drawLine(bx + 13, cy - 8, bx + 11, cy - 6, SSD1306_WHITE);
-  // Mouth: deep frown <-> open wail begging for music
-  if (f == 1 || f == 3) {
-    display.drawCircle(bx, cy + 6, 3, SSD1306_WHITE); // wailing "play it!!"
-  } else {
-    display.drawLine(bx - 4, cy + 7, bx + 4, cy + 7, SSD1306_WHITE);
-    display.drawLine(bx - 4, cy + 7, bx - 5, cy + 4, SSD1306_WHITE);
-    display.drawLine(bx + 4, cy + 7, bx + 5, cy + 4, SSD1306_WHITE);
-  }
-}
+// 3afak-please meme kid for the PAUSED screen (40x36 mono, left side)
+static const uint8_t AFAK_IMG[] = {
+  0xFF, 0xFF, 0xFB, 0x7F, 0xFF, 0xFF, 0xFF, 0xC0, 0x1F, 0xFF, 0xFF, 0xFF,
+  0x00, 0x03, 0xF7, 0xFF, 0xFE, 0x00, 0x00, 0xDF, 0xFF, 0xF8, 0x00, 0x00,
+  0xFF, 0xFF, 0xF8, 0x00, 0x00, 0x3B, 0xFF, 0xF0, 0x20, 0x00, 0x3F, 0xFF,
+  0xE0, 0x15, 0x55, 0x1B, 0xFF, 0xC0, 0xA4, 0xA8, 0x2F, 0xFF, 0xC0, 0x12,
+  0x92, 0x9D, 0xFF, 0x82, 0xAA, 0x49, 0x0F, 0x15, 0x01, 0x25, 0x54, 0x4D,
+  0x5C, 0x04, 0x95, 0x4A, 0x87, 0xB6, 0x05, 0x54, 0xA4, 0x57, 0xEE, 0x11,
+  0x22, 0x51, 0x06, 0xC8, 0x04, 0x01, 0x00, 0x23, 0xDC, 0x00, 0x00, 0xA2,
+  0x88, 0x54, 0x0A, 0xA8, 0x08, 0x57, 0x7A, 0x02, 0xA4, 0x42, 0x04, 0x6C,
+  0x28, 0x41, 0x20, 0x92, 0xBC, 0x05, 0x04, 0xA0, 0x04, 0xF4, 0x10, 0x00,
+  0xA8, 0x00, 0xAE, 0x08, 0x09, 0x52, 0x12, 0xB4, 0x42, 0x42, 0x68, 0x49,
+  0x7A, 0x14, 0x91, 0x55, 0x04, 0xD8, 0x12, 0x4A, 0x80, 0xA9, 0x2C, 0x09,
+  0x24, 0x25, 0x22, 0xB6, 0x2A, 0xAA, 0x00, 0xA8, 0x50, 0x84, 0x90, 0x00,
+  0x4A, 0xA8, 0x29, 0x55, 0x24, 0xA4, 0x68, 0x04, 0xA8, 0x89, 0x28, 0x22,
+  0x49, 0x26, 0x52, 0x42, 0x74, 0x02, 0x95, 0x09, 0x50, 0xA9, 0x28, 0x50,
+  0x44, 0x48, 0xF4, 0x81, 0x0A, 0x11, 0x21, 0xB6, 0x08, 0x40, 0x40, 0x00,
+};
 
 // Parse "M|style|status", "T|hex", "A|hex" lines from the PC sender
 bool parseHex(const String &hex, uint8_t *buf, int n) {
@@ -318,18 +292,18 @@ void drawSpotify() {
     drawPartyBg(millis() / 400);
     drawDancer(110, 38, millis() / 400);
   } else if (isPaused) {
-    // PAUSED: no body — just the big upset face begging for music
+    // PAUSED: 3afak kid + begging text (drawn emoji retired)
     // Play triangle in header (hit play!)
     display.fillTriangle(104, 2, 104, 9, 111, 5, SSD1306_BLACK);
+    display.drawBitmap(0, 14, AFAK_IMG, 40, 36, SSD1306_WHITE);
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
-    display.setCursor(4, 18);
+    display.setCursor(44, 18);
     display.println("cmon bud");
-    display.setCursor(4, 28);
+    display.setCursor(44, 28);
     display.println("play music");
-    display.setCursor(4, 38);
+    display.setCursor(44, 38);
     display.println("lahi7fdak");
-    drawSadFace(106, 35, millis() / 500);
     // EQ flatlines while paused — no bounce without music
     display.drawLine(0, 52, 128, 52, SSD1306_WHITE);
     for (int x = 0; x < 126; x += 6) display.fillRect(x, 61, 3, 2, SSD1306_WHITE);
