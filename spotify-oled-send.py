@@ -12,6 +12,7 @@ Protocol (115200 baud, one command per line):
   A|<hex>                            artist bitmap, 54x11 px, Adafruit packing
   C|<hex>                            cover art, 32x32 px dithered (Spotify/iTunes)
   P|<pos_sec>|<len_sec>              progress clock for the bar + times
+  W|HH:MM|temp|code                  Strasbourg clock + weather (idle screen)
 
 Requirements: playerctl, python3-pyserial, python3-pil (with raqm),
 Noto Naskh Arabic + DejaVu Sans fonts, Spotify desktop app playing.
@@ -151,6 +152,27 @@ def position():
         return None
 
 
+WX = {'t': 0, 'temp': None, 'code': -1}
+
+
+def weather():
+    # Open-Meteo, free, no key — Strasbourg 48.57N 7.75E, cached 10 min
+    if time.time() - WX['t'] > 600 or WX['temp'] is None:
+        try:
+            import json
+            import urllib.request
+            with urllib.request.urlopen(
+                    'https://api.open-meteo.com/v1/forecast?latitude=48.57'
+                    '&longitude=7.75&current=temperature_2m,weather_code'
+                    '&timezone=Europe%2FParis', timeout=8) as r:
+                d = json.load(r)['current']
+            WX.update(t=time.time(), temp=int(round(d['temperature_2m'])),
+                      code=int(d['weather_code']))
+        except Exception:
+            pass
+    return WX['temp'], WX['code']
+
+
 def pick_dance(s):
     h = 5381
     for c in s:
@@ -234,6 +256,8 @@ last_push = 0
 track_len = 0
 lastP = (-1, -1)
 last_pos_q = 0
+idle_on = False
+last_idle_min = ''
 
 
 def push_windows():
@@ -301,4 +325,17 @@ while True:
         if pos is not None and (pos, track_len) != lastP:
             lastP = (pos, track_len)
             send(f'P|{pos}|{track_len}')
+    # idle: Spotify closed/nothing — Strasbourg clock + weather screen
+    parts0 = msg.split('|') if msg else []
+    if not msg or not parts0[0].strip():
+        cur_min = time.strftime('%H:%M')
+        if not idle_on or cur_min != last_idle_min:
+            idle_on = True
+            last_idle_min = cur_min
+            temp, code = weather()
+            send('M|0|Idle')
+            time.sleep(0.05)
+            send(f'W|{cur_min}|{temp if temp is not None else 99}|{code}')
+    else:
+        idle_on = False
     time.sleep(0.1)

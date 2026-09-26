@@ -27,9 +27,13 @@ bool hasT = false;
 bool hasA = false;
 bool hasC = false;
 bool isPaused = false;
+bool isIdle = false; // Spotify closed/nothing — show Strasbourg clock
 int danceStyle = 0; // 0 disco, 1 shuffle, 2 robot, 3 bounce
 long trackPos = 0;  // seconds elapsed (from PC)
 long trackLen = 0;  // seconds total (from PC)
+char clockStr[6] = "--:--";
+int tempC = 99;     // 99 = unknown
+int wCode = -1;     // Open-Meteo weather code
 unsigned long lastMsg = 0;
 unsigned long danceT = 0;
 
@@ -276,6 +280,49 @@ void drawMicroText(int x, int y, const char *s, uint16_t color) {
 }
 int microWidth(const char *s) { return strlen(s) * 4 - 1; }
 
+// Tiny Strasbourg weather icons (20x10 box at x,y), Open-Meteo WMO codes
+void drawWeatherIcon(int x, int y, int code) {
+  if (code == 0) { // clear sun
+    display.drawCircle(x + 10, y + 5, 3, SSD1306_WHITE);
+    display.drawLine(x + 10, y, x + 10, y + 1, SSD1306_WHITE);
+    display.drawLine(x + 10, y + 8, x + 10, y + 9, SSD1306_WHITE);
+    display.drawLine(x + 5, y + 5, x + 6, y + 5, SSD1306_WHITE);
+    display.drawLine(x + 14, y + 5, x + 15, y + 5, SSD1306_WHITE);
+  } else if (code == 1 || code == 2) { // partly cloudy
+    display.drawCircle(x + 5, y + 3, 2, SSD1306_WHITE);
+    display.fillCircle(x + 12, y + 6, 3, SSD1306_WHITE);
+    display.fillCircle(x + 16, y + 6, 2, SSD1306_WHITE);
+    display.drawLine(x + 9, y + 8, x + 18, y + 8, SSD1306_WHITE);
+  } else if (code == 45 || code == 48) { // fog
+    display.drawLine(x + 2, y + 2, x + 17, y + 2, SSD1306_WHITE);
+    display.drawLine(x + 4, y + 5, x + 15, y + 5, SSD1306_WHITE);
+    display.drawLine(x + 2, y + 8, x + 17, y + 8, SSD1306_WHITE);
+  } else if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) { // rain
+    display.fillCircle(x + 10, y + 3, 3, SSD1306_WHITE);
+    display.fillCircle(x + 14, y + 3, 2, SSD1306_WHITE);
+    display.drawLine(x + 7, y + 7, x + 6, y + 9, SSD1306_WHITE);
+    display.drawLine(x + 11, y + 7, x + 10, y + 9, SSD1306_WHITE);
+    display.drawLine(x + 15, y + 7, x + 14, y + 9, SSD1306_WHITE);
+  } else if ((code >= 71 && code <= 77) || code == 85 || code == 86) { // snow
+    display.fillCircle(x + 10, y + 3, 3, SSD1306_WHITE);
+    display.drawPixel(x + 7, y + 8, SSD1306_WHITE);
+    display.drawPixel(x + 11, y + 8, SSD1306_WHITE);
+    display.drawPixel(x + 15, y + 8, SSD1306_WHITE);
+    display.drawPixel(x + 9, y + 6, SSD1306_WHITE);
+    display.drawPixel(x + 13, y + 6, SSD1306_WHITE);
+  } else if (code >= 95) { // thunderstorm
+    display.fillCircle(x + 10, y + 3, 3, SSD1306_WHITE);
+    display.drawLine(x + 11, y + 5, x + 8, y + 7, SSD1306_WHITE);
+    display.drawLine(x + 8, y + 7, x + 11, y + 7, SSD1306_WHITE);
+    display.drawLine(x + 11, y + 7, x + 9, y + 10, SSD1306_WHITE);
+  } else { // overcast / unknown
+    display.fillCircle(x + 7, y + 6, 3, SSD1306_WHITE);
+    display.fillCircle(x + 12, y + 4, 4, SSD1306_WHITE);
+    display.fillCircle(x + 16, y + 6, 2, SSD1306_WHITE);
+    display.drawLine(x + 4, y + 8, x + 18, y + 8, SSD1306_WHITE);
+  }
+}
+
 void drawSpotify() {
   display.clearDisplay();
   // Header
@@ -286,7 +333,23 @@ void drawSpotify() {
   display.println("Spotify");
   display.drawLine(0, 12, 127, 12, SSD1306_WHITE);
 
-  if (!hasT && !hasA && !isPaused) {
+  if (isIdle) {
+    // IDLE (Spotify closed): big Strasbourg clock + weather, flat EQ
+    display.setTextSize(3);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(19, 15);
+    display.println(clockStr);
+    display.setTextSize(1);
+    display.setCursor(4, 43);
+    display.print("Strasbourg ");
+    if (tempC > 90) display.print("--C");
+    else { display.print(tempC); display.print("C"); }
+    drawWeatherIcon(106, 40, wCode);
+    display.drawLine(0, 52, 128, 52, SSD1306_WHITE);
+    for (int x = 0; x < 126; x += 6) display.fillRect(x, 61, 3, 2, SSD1306_WHITE);
+    // Play triangle in header (press play)
+    display.fillTriangle(104, 2, 104, 9, 111, 5, SSD1306_BLACK);
+  } else if (!hasT && !hasA && !isPaused) {
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(10, 28);
     display.println("Waiting...");
@@ -385,7 +448,19 @@ void loop() {
           String st = payload.substring(sep + 1);
           st.trim();
           isPaused = st.equalsIgnoreCase("Paused") || st.equalsIgnoreCase("Pause");
+          isIdle = st.equalsIgnoreCase("Idle");
+          if (isIdle) isPaused = false;
         }
+        drawSpotify();
+      } else if (kind == 'W') {
+        // W|HH:MM|temp|code — Strasbourg clock + weather
+        int p1 = payload.indexOf('|');
+        int p2 = payload.indexOf('|', p1 + 1);
+        String hh = payload.substring(0, p1 > 0 ? p1 : payload.length());
+        hh.trim();
+        hh.toCharArray(clockStr, sizeof(clockStr));
+        if (p1 > 0) tempC = payload.substring(p1 + 1, p2 > 0 ? p2 : payload.length()).toInt();
+        if (p2 > 0) wCode = payload.substring(p2 + 1).toInt();
         drawSpotify();
       } else if (kind == 'T') {
         if (parseHex(payload, titleBmp, TBYTES)) { hasT = true; drawSpotify(); }
