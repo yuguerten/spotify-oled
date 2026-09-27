@@ -364,6 +364,7 @@ void drawSpotify() {
   display.setTextColor(SSD1306_BLACK);
   display.setCursor(4, 2);
   if (isNews) display.println("HackerNews");
+  else if (isIdle) display.println("Strasbourg");
   else display.println("Spotify");
   display.drawLine(0, 12, 127, 12, SSD1306_WHITE);
 
@@ -384,7 +385,7 @@ void drawSpotify() {
     // Play triangle in header (press play)
     display.fillTriangle(104, 2, 104, 9, 111, 5, SSD1306_BLACK);
   } else if (isNews) {
-    // HN headline: Y logo, bold title, points/comments, dancer keeps vibing
+    // HN headline: its own calm scene — Y logo, title, meta, flat EQ, NO dancer
     display.fillTriangle(104, 2, 104, 9, 111, 5, SSD1306_BLACK);
     char nb[10];
     sprintf(nb, "%d/%d", newsIdx, newsTotal);
@@ -399,8 +400,9 @@ void drawSpotify() {
     display.print("Y");
     if (hasT) display.drawBitmap(36, 14, titleBmp, TW, TH, SSD1306_WHITE);
     if (hasA) display.drawBitmap(36, 29, artistBmp, AW, AH, SSD1306_WHITE);
-    drawPartyBg(millis() / 250);
-    drawDancer(110, 38, millis() / 250);
+    // Flat EQ — no music, no bounce
+    display.drawLine(0, 52, 128, 52, SSD1306_WHITE);
+    for (int x = 0; x < 126; x += 6) display.fillRect(x, 61, 3, 2, SSD1306_WHITE);
   } else if (!hasT && !hasA && !isPaused) {
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(10, 28);
