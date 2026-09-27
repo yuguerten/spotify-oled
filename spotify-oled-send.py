@@ -232,22 +232,55 @@ def cover_hex(title, artist, art_url):
     return pack_row_major(bw).hex()
 
 
-s = serial.Serial('/dev/ttyUSB0', 115200, timeout=1)
-try:
-    s.dtr = False
-    s.rts = False
-except Exception:
-    pass
-time.sleep(2.5)  # let ESP32 boot after open-reset
-try:
-    s.reset_input_buffer()
-except Exception:
-    pass
+ser = None
+need_full = True  # force a full M/T/A/C resync (fresh boot or reconnect)
+
+
+def ensure_serial():
+    """Open the port if needed. Returns True when usable."""
+    global ser, need_full
+    if ser is not None:
+        return True
+    try:
+        ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=1)
+        try:
+            ser.dtr = False
+            ser.rts = False
+        except Exception:
+            pass
+        time.sleep(2.5)  # let ESP32 boot after open-reset
+        try:
+            ser.reset_input_buffer()
+        except Exception:
+            pass
+        need_full = True  # ESP32 rebooted blank — resend everything
+        print('serial: connected /dev/ttyUSB0', flush=True)
+        return True
+    except Exception as e:
+        ser = None
+        return False
+
+
+def drop_serial(reason):
+    global ser
+    print(f'serial: dropped ({reason}), retrying...', flush=True)
+    try:
+        if ser is not None:
+            ser.close()
+    except Exception:
+        pass
+    ser = None
 
 
 def send(line):
-    s.write((line + '\n').encode())
-    s.flush()
+    """False when the port died (caller: drop + retry later)."""
+    try:
+        ser.write((line + '\n').encode())
+        ser.flush()
+        return True
+    except Exception as e:
+        drop_serial(e)
+        return False
 
 
 last = ''
@@ -283,6 +316,9 @@ def push_windows():
 
 
 while True:
+    if not ensure_serial():
+        time.sleep(2)  # cable unplugged / port busy — wait and retry
+        continue
     msg = snapshot()
     if msg:
         parts = msg.split('|')
@@ -296,14 +332,15 @@ while True:
                 except ValueError:
                     pass
             art_url = parts[4].strip() if len(parts) > 4 else ''
-            if msg != last:
+            if msg != last or need_full:
                 last = msg
                 style = pick_dance(title + artist)
                 fullT = render_line(title, T_SIZE, TH, bold=True)
                 fullA = render_line(artist, A_SIZE, AH)
                 cover_now = cover_hex(title, artist, art_url)
                 offT = offA = 0
-                send(f'M|{style}|{status}')
+                if not send(f'M|{style}|{status}'):
+                    continue
                 time.sleep(0.05)
                 push_windows()
                 if cover_now:
@@ -311,6 +348,7 @@ while True:
                     send('C|' + cover_now)
                     print(f'cover: {len(cover_now) // 2} bytes', flush=True)
                 last_push = time.time()
+                need_full = False
                 print(f'sent: {title}|{artist}|{status} style={style}', flush=True)
     # re-push windows regularly: scrolls long lines, retries static ones + cover
     if fullT is not None and time.time() - last_push > 0.4:
@@ -331,9 +369,10 @@ while True:
     parts0 = msg.split('|') if msg else []
     if not msg or not parts0[0].strip():
         cur_min = time.strftime('%H:%M')
-        if not idle_on or cur_min != last_idle_min:
+        if not idle_on or cur_min != last_idle_min or need_full:
             idle_on = True
             last_idle_min = cur_min
+            need_full = False
             temp, code = weather()
             send('M|0|Idle')
             time.sleep(0.05)
