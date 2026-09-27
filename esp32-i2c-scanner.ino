@@ -17,15 +17,26 @@
 #define CW 32
 #define CH 32
 #define CBYTES (((CW + 7) / 8) * CH)   // 128
+// News headline zones: full OLED width
+#define NW 128
+#define NH 14
+#define EW 128
+#define EH 11
+#define NBYTES (((NW + 7) / 8) * NH)   // 224
+#define EBYTES (((EW + 7) / 8) * EH)   // 176
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 uint8_t titleBmp[TBYTES];
 uint8_t artistBmp[ABYTES];
 uint8_t coverBmp[CBYTES];
+uint8_t newsTitleBmp[NBYTES];
+uint8_t newsMetaBmp[EBYTES];
 bool hasT = false;
 bool hasA = false;
 bool hasC = false;
+bool hasN = false;
+bool hasE = false;
 bool isPaused = false;
 bool isIdle = false; // Spotify closed/nothing — show Strasbourg clock
 bool isNews = false; // idle rotation — Hacker News headline
@@ -394,8 +405,8 @@ void drawSpotify() {
     display.setTextColor(SSD1306_BLACK);
     display.setCursor(100 - strlen(nb) * 6, 2);
     display.print(nb);
-    if (hasT) display.drawBitmap(37, 16, titleBmp, TW, TH, SSD1306_WHITE);
-    if (hasA) display.drawBitmap(37, 34, artistBmp, AW, AH, SSD1306_WHITE);
+    if (hasN) display.drawBitmap(0, 16, newsTitleBmp, NW, NH, SSD1306_WHITE);
+    if (hasE) display.drawBitmap(0, 34, newsMetaBmp, EW, EH, SSD1306_WHITE);
     int n = newsTotal > 8 ? 8 : newsTotal;
     if (n < 1) n = 1;
     for (int i = 0; i < n; i++) {
@@ -522,6 +533,10 @@ void loop() {
         if (parseHex(payload, artistBmp, ABYTES)) { hasA = true; drawSpotify(); }
       } else if (kind == 'C') {
         if (parseHex(payload, coverBmp, CBYTES)) { hasC = true; drawSpotify(); }
+      } else if (kind == 'N') {
+        if (parseHex(payload, newsTitleBmp, NBYTES)) { hasN = true; drawSpotify(); }
+      } else if (kind == 'E') {
+        if (parseHex(payload, newsMetaBmp, EBYTES)) { hasE = true; drawSpotify(); }
       } else if (kind == 'P') {
         // P|posSec|lenSec — progress clock, no redraw reset
         int sep = payload.indexOf('|');

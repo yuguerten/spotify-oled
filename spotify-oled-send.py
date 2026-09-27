@@ -11,6 +11,8 @@ Protocol (115200 baud, one command per line):
   T|<hex>                            title bitmap, 54x14 px, Adafruit packing
   A|<hex>                            artist bitmap, 54x11 px, Adafruit packing
   C|<hex>                            cover art, 32x32 px dithered (Spotify/iTunes)
+  N|<hex>                            news title, 128x14 px (full width)
+  E|<hex>                            news meta, 128x11 px (full width)
   P|<pos_sec>|<len_sec>              progress clock for the bar + times
   W|HH:MM|temp|code                  Strasbourg clock + weather (idle screen)
 
@@ -29,6 +31,7 @@ TW, TH, T_SIZE = 54, 14, 12
 AW, AH, A_SIZE = 54, 11, 9
 WIN = 54
 GAP = 12
+NWIN = 128  # news headline zones use the full OLED width
 CW, CH = 32, 32
 
 FONTS = {}
@@ -129,6 +132,11 @@ def pack_row_major(img):
 
 def window_hex(full, off):
     win = full.crop((off, 0, off + WIN, full.height))
+    return pack_row_major(win).hex()
+
+
+def window_hex_w(full, off, w):
+    win = full.crop((off, 0, off + w, full.height))
     return pack_row_major(win).hex()
 
 
@@ -312,6 +320,8 @@ last = ''
 fullT = fullA = None
 cover_now = None
 offT = offA = 0
+offN = offE = 0
+news_active = False
 last_push = 0
 track_len = 0
 lastP = (-1, -1)
@@ -341,6 +351,26 @@ def push_windows():
             send('A|' + window_hex(fullA, 0))
 
 
+def push_news():
+    global offN, offE
+    if fullT is not None:
+        if fullT.width > NWIN:
+            strip = Image.new('1', (fullT.width + GAP, TH), 0)
+            strip.paste(fullT, (0, 0))
+            offN = (offN + 3) % (strip.width - NWIN + 1)
+            send('N|' + window_hex_w(strip, offN, NWIN))
+        else:
+            send('N|' + window_hex_w(fullT, 0, NWIN))
+    if fullA is not None:
+        if fullA.width > NWIN:
+            strip = Image.new('1', (fullA.width + GAP, AH), 0)
+            strip.paste(fullA, (0, 0))
+            offE = (offE + 3) % (strip.width - NWIN + 1)
+            send('E|' + window_hex_w(strip, offE, NWIN))
+        else:
+            send('E|' + window_hex_w(fullA, 0, NWIN))
+
+
 while True:
     if not ensure_serial():
         time.sleep(2)  # cable unplugged / port busy — wait and retry
@@ -360,6 +390,7 @@ while True:
             art_url = parts[4].strip() if len(parts) > 4 else ''
             if msg != last or need_full:
                 last = msg
+                news_active = False
                 style = pick_dance(title + artist)
                 fullT = render_line(title, T_SIZE, TH, bold=True)
                 fullA = render_line(artist, A_SIZE, AH)
@@ -378,12 +409,19 @@ while True:
                 print(f'sent: {title}|{artist}|{status} style={style}', flush=True)
     # re-push windows regularly: scrolls long lines, retries static ones + cover
     if fullT is not None and time.time() - last_push > 0.4:
-        scrolling = (fullT.width > WIN) or (fullA is not None and fullA.width > WIN)
-        if scrolling or time.time() - last_push > 2.0:
-            push_windows()
-            if cover_now and time.time() - last_push > 2.0:
-                send('C|' + cover_now)
-            last_push = time.time()
+        if news_active:
+            scrolling = (fullT.width > NWIN) or \
+                (fullA is not None and fullA.width > NWIN)
+            if scrolling or time.time() - last_push > 2.0:
+                push_news()
+                last_push = time.time()
+        else:
+            scrolling = (fullT.width > WIN) or (fullA is not None and fullA.width > WIN)
+            if scrolling or time.time() - last_push > 2.0:
+                push_windows()
+                if cover_now and time.time() - last_push > 2.0:
+                    send('C|' + cover_now)
+                last_push = time.time()
     # progress clock (~0.5s, sent only when the second changes)
     if fullT is not None and time.time() - last_pos_q > 0.5:
         last_pos_q = time.time()
@@ -413,12 +451,13 @@ while True:
             if key != last_idle_key or need_full:
                 last_idle_key = key
                 need_full = False
+                news_active = True
                 fullT = render_line(title, T_SIZE, TH, bold=True)
                 fullA = render_line(f'\u25B2{pts}  {com} comments', A_SIZE, AH)
-                offT = offA = 0
+                offN = offE = 0
                 send(f'M|0|News|{slot}|{n}')
                 time.sleep(0.05)
-                push_windows()
+                push_news()
                 last_push = time.time()
                 print(f'news: {title}', flush=True)
     else:
