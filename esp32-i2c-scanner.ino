@@ -28,6 +28,9 @@ bool hasA = false;
 bool hasC = false;
 bool isPaused = false;
 bool isIdle = false; // Spotify closed/nothing — show Strasbourg clock
+bool isNews = false; // idle rotation — Hacker News headline
+int newsIdx = 0;
+int newsTotal = 0;
 int danceStyle = 0; // 0 disco, 1 shuffle, 2 robot, 3 bounce
 long trackPos = 0;  // seconds elapsed (from PC)
 long trackLen = 0;  // seconds total (from PC)
@@ -360,7 +363,8 @@ void drawSpotify() {
   display.setTextSize(1);
   display.setTextColor(SSD1306_BLACK);
   display.setCursor(4, 2);
-  display.println("Spotify");
+  if (isNews) display.println("HackerNews");
+  else display.println("Spotify");
   display.drawLine(0, 12, 127, 12, SSD1306_WHITE);
 
   if (isIdle) {
@@ -379,6 +383,24 @@ void drawSpotify() {
     for (int x = 0; x < 126; x += 6) display.fillRect(x, 61, 3, 2, SSD1306_WHITE);
     // Play triangle in header (press play)
     display.fillTriangle(104, 2, 104, 9, 111, 5, SSD1306_BLACK);
+  } else if (isNews) {
+    // HN headline: Y logo, bold title, points/comments, dancer keeps vibing
+    display.fillTriangle(104, 2, 104, 9, 111, 5, SSD1306_BLACK);
+    char nb[10];
+    sprintf(nb, "%d/%d", newsIdx, newsTotal);
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_BLACK);
+    display.setCursor(100 - strlen(nb) * 6, 2);
+    display.print(nb);
+    display.drawRect(0, 13, 34, 34, SSD1306_WHITE);
+    display.setTextSize(3);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(9, 19);
+    display.print("Y");
+    if (hasT) display.drawBitmap(36, 14, titleBmp, TW, TH, SSD1306_WHITE);
+    if (hasA) display.drawBitmap(36, 29, artistBmp, AW, AH, SSD1306_WHITE);
+    drawPartyBg(millis() / 250);
+    drawDancer(110, 38, millis() / 250);
   } else if (!hasT && !hasA && !isPaused) {
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(10, 28);
@@ -462,15 +484,24 @@ void loop() {
       char kind = line.charAt(0);
       String payload = line.substring(2);
       if (kind == 'M') {
-        // M|style|status
+        // M|style|status (+|idx|total for News)
         int sep = payload.indexOf('|');
         danceStyle = payload.substring(0, sep > 0 ? sep : payload.length()).toInt() % 4;
         if (sep > 0) {
-          String st = payload.substring(sep + 1);
+          int sep2 = payload.indexOf('|', sep + 1);
+          String st = (sep2 > 0) ? payload.substring(sep + 1, sep2)
+                                 : payload.substring(sep + 1);
           st.trim();
           isPaused = st.equalsIgnoreCase("Paused") || st.equalsIgnoreCase("Pause");
           isIdle = st.equalsIgnoreCase("Idle");
+          isNews = st.equalsIgnoreCase("News");
           if (isIdle) isPaused = false;
+          if (isNews) {
+            isPaused = false;
+            int sep3 = (sep2 > 0) ? payload.indexOf('|', sep2 + 1) : -1;
+            if (sep2 > 0) newsIdx = payload.substring(sep2 + 1, sep3 > 0 ? sep3 : payload.length()).toInt();
+            if (sep3 > 0) newsTotal = payload.substring(sep3 + 1).toInt();
+          }
         }
         drawSpotify();
       } else if (kind == 'W') {

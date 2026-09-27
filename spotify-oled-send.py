@@ -157,6 +157,31 @@ def position():
 WX = {'t': 0, 'temp': None, 'code': -1}
 
 
+HN = {'t': 0, 'items': []}
+
+
+def hn_top():
+    # Hacker News front page via Algolia, free, no key — cached 10 min
+    if time.time() - HN['t'] > 600 or not HN['items']:
+        try:
+            import json
+            import urllib.request
+            with urllib.request.urlopen(
+                    'https://hn.algolia.com/api/v1/search?tags=front_page',
+                    timeout=8) as r:
+                d = json.load(r)
+            items = [((h.get('title') or ''),
+                      h.get('points') or 0,
+                      h.get('num_comments') or 0)
+                     for h in d.get('hits', [])]
+            items = [it for it in items if it[0].strip()][:10]
+            if items:
+                HN.update(t=time.time(), items=items)
+        except Exception:
+            pass
+    return HN['items']
+
+
 def weather():
     # Open-Meteo, free, no key — Strasbourg 48.57N 7.75E, cached 10 min
     if time.time() - WX['t'] > 600 or WX['temp'] is None:
@@ -365,18 +390,36 @@ while True:
         if pos is not None and (pos, track_len) != lastP:
             lastP = (pos, track_len)
             send(f'P|{pos}|{track_len}')
-    # idle: Spotify closed/nothing — Strasbourg clock + weather screen
+    # idle: Spotify closed — rotate Strasbourg clock and HN headlines
     parts0 = msg.split('|') if msg else []
     if not msg or not parts0[0].strip():
-        cur_min = time.strftime('%H:%M')
-        if not idle_on or cur_min != last_idle_min or need_full:
-            idle_on = True
-            last_idle_min = cur_min
-            need_full = False
-            temp, code = weather()
-            send('M|0|Idle')
-            time.sleep(0.05)
-            send(f'W|{cur_min}|{temp if temp is not None else 99}|{code}')
+        items = hn_top()
+        n = min(len(items), 5)
+        slot = int(time.time() // 8) % (1 + n)
+        if slot == 0:
+            key = ('clock', time.strftime('%H:%M'))
+            if key != last_idle_key or need_full:
+                last_idle_key = key
+                need_full = False
+                cur_min = time.strftime('%H:%M')
+                temp, code = weather()
+                send('M|0|Idle')
+                time.sleep(0.05)
+                send(f'W|{cur_min}|{temp if temp is not None else 99}|{code}')
+        else:
+            title, pts, com = items[slot - 1]
+            key = ('news', title)
+            if key != last_idle_key or need_full:
+                last_idle_key = key
+                need_full = False
+                fullT = render_line(title, T_SIZE, TH, bold=True)
+                fullA = render_line(f'\u25B2{pts}  {com} comments', A_SIZE, AH)
+                offT = offA = 0
+                send(f'M|0|News|{slot}|{n}')
+                time.sleep(0.05)
+                push_windows()
+                last_push = time.time()
+                print(f'news: {title}', flush=True)
     else:
         idle_on = False
     time.sleep(0.1)
