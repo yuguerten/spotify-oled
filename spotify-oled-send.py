@@ -318,6 +318,7 @@ lastP = (-1, -1)
 last_pos_q = 0
 idle_on = False
 last_idle_min = ''
+last_idle_key = None
 
 
 def push_windows():
