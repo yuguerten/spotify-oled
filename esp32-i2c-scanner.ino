@@ -366,7 +366,7 @@ void drawSpotify() {
   if (isNews) display.println("HackerNews");
   else if (isIdle) display.println("Strasbourg");
   else display.println("Spotify");
-  display.drawLine(0, 12, 127, 12, SSD1306_WHITE);
+  if (!isNews) display.drawLine(0, 12, 127, 12, SSD1306_WHITE);
 
   if (isIdle) {
     // IDLE (Spotify closed): big Strasbourg clock + weather, flat EQ
@@ -385,7 +385,8 @@ void drawSpotify() {
     // Play triangle in header (press play)
     display.fillTriangle(104, 2, 104, 9, 111, 5, SSD1306_BLACK);
   } else if (isNews) {
-    // HN headline: its own calm scene — Y logo, title, meta, flat EQ, NO dancer
+    // HN headline: fully standalone scene — no boxes, no lines, no dancer.
+    // Centered title + meta, story dots at the bottom.
     display.fillTriangle(104, 2, 104, 9, 111, 5, SSD1306_BLACK);
     char nb[10];
     sprintf(nb, "%d/%d", newsIdx, newsTotal);
@@ -393,16 +394,15 @@ void drawSpotify() {
     display.setTextColor(SSD1306_BLACK);
     display.setCursor(100 - strlen(nb) * 6, 2);
     display.print(nb);
-    display.drawRect(0, 13, 34, 34, SSD1306_WHITE);
-    display.setTextSize(3);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(9, 19);
-    display.print("Y");
-    if (hasT) display.drawBitmap(36, 14, titleBmp, TW, TH, SSD1306_WHITE);
-    if (hasA) display.drawBitmap(36, 29, artistBmp, AW, AH, SSD1306_WHITE);
-    // Flat EQ — no music, no bounce
-    display.drawLine(0, 52, 128, 52, SSD1306_WHITE);
-    for (int x = 0; x < 126; x += 6) display.fillRect(x, 61, 3, 2, SSD1306_WHITE);
+    if (hasT) display.drawBitmap(37, 16, titleBmp, TW, TH, SSD1306_WHITE);
+    if (hasA) display.drawBitmap(37, 34, artistBmp, AW, AH, SSD1306_WHITE);
+    int n = newsTotal > 8 ? 8 : newsTotal;
+    if (n < 1) n = 1;
+    for (int i = 0; i < n; i++) {
+      int dx = 64 + i * 10 - ((n - 1) * 10) / 2;
+      if (i + 1 == newsIdx) display.fillCircle(dx, 56, 2, SSD1306_WHITE);
+      else display.drawCircle(dx, 56, 2, SSD1306_WHITE);
+    }
   } else if (!hasT && !hasA && !isPaused) {
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(10, 28);
