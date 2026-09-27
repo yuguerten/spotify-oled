@@ -321,6 +321,7 @@ fullT = fullA = None
 cover_now = None
 offT = offA = 0
 offN = offE = 0
+tickT = tickA = tickN = tickE = 0
 news_active = False
 last_push = 0
 track_len = 0
@@ -331,42 +332,56 @@ last_idle_min = ''
 last_idle_key = None
 
 
+def scroll_pos(tick, max_off):
+    """Window offset with a ~2s dwell at both ends so text can be read."""
+    if max_off <= 0:
+        return 0
+    steps = max_off // 3 + 1
+    cyc = steps + 10  # 5 dwell ticks per end at 0.4s
+    t = tick % cyc
+    if t < 5:
+        return 0
+    if t >= cyc - 5:
+        return max_off
+    return min((t - 5) * 3, max_off)
+
+
 def push_windows():
-    global offT, offA
+    global tickT, tickA
     if fullT is not None:
         if fullT.width > WIN:
             strip = Image.new('1', (fullT.width + GAP, TH), 0)
             strip.paste(fullT, (0, 0))
-            offT = (offT + 3) % (strip.width - WIN + 1)
-            send('T|' + window_hex(strip, offT))
+            tickT += 1
+            send('T|' + window_hex(strip, scroll_pos(tickT, strip.width - WIN)))
         else:
             send('T|' + window_hex(fullT, 0))
     if fullA is not None:
         if fullA.width > WIN:
             strip = Image.new('1', (fullA.width + GAP, AH), 0)
             strip.paste(fullA, (0, 0))
-            offA = (offA + 3) % (strip.width - WIN + 1)
-            send('A|' + window_hex(strip, offA))
+            tickA += 1
+            send('A|' + window_hex(strip, scroll_pos(tickA, strip.width - WIN)))
         else:
             send('A|' + window_hex(fullA, 0))
 
 
 def push_news():
-    global offN, offE
+    global tickN, tickE
     if fullT is not None:
         if fullT.width > NWIN:
             strip = Image.new('1', (fullT.width + GAP, TH), 0)
             strip.paste(fullT, (0, 0))
-            offN = (offN + 3) % (strip.width - NWIN + 1)
-            send('N|' + window_hex_w(strip, offN, NWIN))
+            tickN += 1
+            send('N|' + window_hex_w(strip, scroll_pos(tickN, strip.width - NWIN), NWIN))
         else:
             send('N|' + window_hex_w(fullT, 0, NWIN))
     if fullA is not None:
         if fullA.width > NWIN:
             strip = Image.new('1', (fullA.width + GAP, AH), 0)
             strip.paste(fullA, (0, 0))
-            offE = (offE + 3) % (strip.width - NWIN + 1)
-            send('E|' + window_hex_w(strip, offE, NWIN))
+            tickE += 1
+            send('E|' + window_hex_w(strip, scroll_pos(tickE, strip.width - NWIN), NWIN))
         else:
             send('E|' + window_hex_w(fullA, 0, NWIN))
 
@@ -396,6 +411,7 @@ while True:
                 fullA = render_line(artist, A_SIZE, AH)
                 cover_now = cover_hex(title, artist, art_url)
                 offT = offA = 0
+                tickT = tickA = 0
                 if not send(f'M|{style}|{status}'):
                     continue
                 time.sleep(0.05)
@@ -455,6 +471,7 @@ while True:
                 fullT = render_line(title, T_SIZE, TH, bold=True)
                 fullA = render_line(f'\u25B2{pts}  {com} comments', A_SIZE, AH)
                 offN = offE = 0
+                tickN = tickE = 0
                 send(f'M|0|News|{slot}|{n}')
                 time.sleep(0.05)
                 push_news()
