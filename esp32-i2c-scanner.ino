@@ -6,6 +6,11 @@
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
 
+// Status LEDs: green = playing, red = paused, yellow = idle/news/waiting
+#define LED_GREEN 25
+#define LED_YELLOW 26
+#define LED_RED 27
+
 // Text bitmap zones (rendered on PC with full Arabic shaping, pushed over serial)
 #define TW 54
 #define TH 14
@@ -367,6 +372,19 @@ void drawWeatherIcon(int x, int y, int code) {
   }
 }
 
+void ledsOff() {
+  digitalWrite(LED_GREEN, LOW);
+  digitalWrite(LED_YELLOW, LOW);
+  digitalWrite(LED_RED, LOW);
+}
+
+void showLeds() {
+  ledsOff();
+  if (isPaused) digitalWrite(LED_RED, HIGH);
+  else if (hasT || hasA) digitalWrite(LED_GREEN, HIGH);
+  else digitalWrite(LED_YELLOW, HIGH); // waiting, idle, news
+}
+
 void drawSpotify() {
   display.clearDisplay();
   // Header
@@ -473,10 +491,21 @@ void drawSpotify() {
     drawPartyBg(millis() / 250);
     drawDancer(110, 38, millis() / 250);
   }
+  showLeds();
   display.display();
 }
 
 void setup() {
+  pinMode(LED_GREEN, OUTPUT);
+  pinMode(LED_YELLOW, OUTPUT);
+  pinMode(LED_RED, OUTPUT);
+  // Self-test: blink each LED once so wiring can be verified
+  int pins[3] = {LED_GREEN, LED_YELLOW, LED_RED};
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(pins[i], HIGH);
+    delay(250);
+    digitalWrite(pins[i], LOW);
+  }
   Serial.setRxBufferSize(1024); // bitmap hex lines are ~300 chars
   Serial.begin(115200);
   delay(500);
