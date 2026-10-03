@@ -31,3 +31,8 @@ It polls Spotify (~0.5 s), renders title/artist to 1-bit bitmaps
 (`hash(title+artist) % 4`: disco / shuffle / robot / bounce) and pushes
 everything over USB serial. Close `arduino-cli monitor` first — only one
 program can hold `/dev/ttyUSB0`.
+
+> **Always stop the sender before uploading firmware** — it holds the
+> serial port and will steal it back mid-flash, failing the upload with
+> `Failed to write to target RAM`. Find it with
+> `ps aux | grep spotify-oled-send`, `kill` it, upload, restart it.
